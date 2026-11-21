@@ -24,7 +24,7 @@ declare global {
   interface Window { google?: any }
 }
 export function driveConfigured() { return Boolean(CLIENT_ID); }
-export async function connectGoogleDrive(): Promise<string> {
+async function requestGoogleToken(prompt: "" | "consent"): Promise<string> {
   if (!CLIENT_ID) throw new Error("Google Drive connect karne ke liye VITE_GOOGLE_CLIENT_ID configure karna zaroori hai.");
   await loadScript("https://accounts.google.com/gsi/client");
   const google = window.google;
@@ -33,21 +33,49 @@ export async function connectGoogleDrive(): Promise<string> {
     pendingResolve = resolve; pendingReject = reject;
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID, scope: SCOPE, callback: (response: any) => {
-        if (response.error || !response.access_token) { pendingReject?.(new Error(response.error_description || response.error || "Google sign-in failed.")); }
-        else { accessToken = response.access_token; pendingResolve?.(accessToken); }
+        if (response.error || !response.access_token) {
+          pendingReject?.(new Error(response.error_description || response.error || "Google sign-in required."));
+        } else {
+          accessToken = response.access_token;
+          pendingResolve?.(accessToken);
+        }
         pendingResolve = null; pendingReject = null;
       },
     });
-    tokenClient!.requestAccessToken({ prompt: "consent" });
+    tokenClient!.requestAccessToken({ prompt });
   });
+}
+export async function connectGoogleDrive(): Promise<string> {
+  return requestGoogleToken("consent");
+}
+// Re-acquire a short-lived token without showing the consent screen when Google
+// still has an active session and the user previously granted access.
+export async function restoreGoogleDriveSession(): Promise<boolean> {
+  if (!CLIENT_ID) return false;
+  try {
+    await requestGoogleToken("");
+    return true;
+  } catch {
+    accessToken = "";
+    return false;
+  }
 }
 export function disconnectGoogleDrive() { accessToken = ""; tokenClient = null; }
 export function isGoogleDriveConnected() { return Boolean(accessToken); }
-async function api(path: string, init: RequestInit = {}) {
-  if (!accessToken) throw new Error("Pehle Google Drive connect karein.");
-  const response = await fetch("https://www.googleapis.com/drive/v3/" + path, {
+async function authorizedFetch(url: string, init: RequestInit = {}) {
+  if (!accessToken && !(await restoreGoogleDriveSession())) throw new Error("Google Drive session expire hai. Settings mein Connect Google Drive press karein.");
+  let response = await fetch(url, {
     ...init, headers: { Authorization: "Bearer " + accessToken, ...(init.headers || {}) },
   });
+  if (response.status === 401 && await restoreGoogleDriveSession()) {
+    response = await fetch(url, {
+      ...init, headers: { Authorization: "Bearer " + accessToken, ...(init.headers || {}) },
+    });
+  }
+  return response;
+}
+async function api(path: string, init: RequestInit = {}) {
+  const response = await authorizedFetch("https://www.googleapis.com/drive/v3/" + path, init);
   if (!response.ok) throw new Error("Google Drive error: " + response.status + " " + (await response.text()).slice(0, 250));
   return response;
 }
@@ -73,7 +101,7 @@ export async function uploadDriveBackup() {
     "--" + boundary + "\r\nContent-Type: application/json\r\n\r\n", blob, "\r\n--" + boundary + "--",
   ]);
   const url = existing ? "https://www.googleapis.com/upload/drive/v3/files/" + existing.id + "?uploadType=multipart" : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-  const response = await fetch(url, { method: existing ? "PATCH" : "POST", headers: { Authorization: "Bearer " + accessToken, "Content-Type": "multipart/related; boundary=" + boundary }, body });
+  const response = await authorizedFetch(url, { method: existing ? "PATCH" : "POST", headers: { "Content-Type": "multipart/related; boundary=" + boundary }, body });
   if (!response.ok) throw new Error("Backup upload failed: " + response.status + " " + (await response.text()).slice(0, 250));
   return new Date().toISOString();
 }
