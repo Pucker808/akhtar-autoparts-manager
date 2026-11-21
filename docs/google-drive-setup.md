@@ -24,6 +24,7 @@ The app requests the limited `drive.file` scope. It creates an **Akhtar Autos Da
 ## Important behavior
 
 - The browser database remains the working copy; Drive stores a snapshot backup. It is not a live shared database or simultaneous multi-device merge.
-- Automatic upload requires an internet connection and an active Google authorization session. Reconnect after a browser restart or when Google expires the token.
+- The app now attempts to restore the Google authorization silently when it opens, and retries once after an expired-token response. If Google cannot silently authorize (for example, the Google account signed out, consent revoked, or the testing authorization is no longer valid), the owner must connect again.
+- This browser-only flow does not store a permanent refresh token. A guaranteed long-lived connection would require a secure server-side OAuth callback and encrypted refresh-token storage.
 - Restore replaces the current device's app tables. Download a local backup first if its data may be needed.
 - Do not use the app for live shop accounting until the project has been built and tested with real workflows and a recovery copy.
