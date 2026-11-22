@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { adjustStock, computeInvoice, customerBalance, ensureDefaults, postPurchase, postSale, recordPayment, returnSale, saveItem, saveParty, stockQty, transferStock } from "@/lib/ops";
+import { adjustStock, computeInvoice, customerBalance, ensureDefaults, postPurchase, postSale, recordPayment, returnSale, returnPurchase, saveItem, saveParty, stockQty, transferStock, supplierBalance } from "@/lib/ops";
 import { saveSettings } from "@/lib/settings";
 import { summarize } from "@/lib/reports";
 import { periodRange, pkDateToMs, DAY } from "@/lib/dates";
@@ -101,6 +101,23 @@ describe("transfers and adjustments", () => {
     const l = (await db.ledger.where("type").equals("adjust").toArray())[0];
     expect(l!.cost).toBe(3000_00);
     await expect(adjustStock({ itemId: item, locationId: shop, qty: -50, reason: "x" })).rejects.toThrow();
+  });
+});
+
+describe("purchase returns", () => {
+  it("reduces stock, creates return record, and updates supplier credit", async () => {
+    const purId = (await db.purchases.toArray())[0]!.id!;
+    const beforeStock = await stockQty(item);
+    const beforeBal = await supplierBalance(sup);
+    await returnPurchase({ purchaseId: purId, lines: [{ itemId: item, qty: 2 }], refundCash: 0, date: T0 + 8000 });
+    expect(await stockQty(item)).toBe(beforeStock - 2);
+    const rets = await db.purchaseReturns.toArray();
+    expect(rets.length).toBe(1);
+    expect(rets[0]!.amount).toBe(2000_00); // 2 * 1000 (first batch cost)
+    expect(rets[0]!.creditAmount).toBe(2000_00);
+    expect(await supplierBalance(sup)).toBe(beforeBal - 2000_00);
+    // cannot return more than remaining on the line
+    await expect(returnPurchase({ purchaseId: purId, lines: [{ itemId: item, qty: 9 }], refundCash: 0 })).rejects.toThrow();
   });
 });
 
