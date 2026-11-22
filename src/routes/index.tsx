@@ -7,6 +7,9 @@ import { formatPKR, toPaisa } from "../lib/money";
 import { stockSnapshot, summarize, receivablesTotal, payablesTotal } from "../lib/reports";
 import { periodRange, fDate } from "../lib/dates";
 import { connectGoogleDrive, disconnectGoogleDrive, driveConfigured, isGoogleDriveConnected, restoreGoogleDriveSession, uploadDriveBackup, restoreDriveBackup } from "../lib/googleDrive";
+import { ReceiptStudio } from "../components/receipt-studio";
+import { getAppTheme, saveAppTheme, getReceiptDesign, renderReceiptHtml, type AppTheme } from "../lib/receipt";
+import { getSettings } from "../lib/settings";
 
 export const Route = createFileRoute("/")({ component: Index });
 type Tab = "overview" | "inventory" | "sales" | "purchases" | "parties" | "expenses" | "reports" | "settings";
@@ -37,6 +40,7 @@ function Index() {
   const [lastDriveSync, setLastDriveSync] = useState("");
   const [period, setPeriod] = useState<"today" | "week" | "month" | "year">("month");
   const [busy, setBusy] = useState(false);
+  const [theme, setTheme] = useState<AppTheme>("light");
 
   const [saleOpen, setSaleOpen] = useState(false);
   const [saleSearch, setSaleSearch] = useState("");
@@ -100,6 +104,7 @@ function Index() {
         }
       });
     }
+    void getAppTheme().then(setTheme);
   }, []);
 
   async function act(fn: () => Promise<any>, ok: string) {
@@ -171,7 +176,7 @@ function Index() {
         locationId: saleLoc || locs[0]?.id || 1,
       });
       const sale = await db.sales.get(id);
-      if (sale) printSale(sale);
+      if (sale) void openReceipt(sale);
       setSaleLines([]); setSaleCustomer(""); setSalePaid(""); setSaleDiscount("0"); setSaleSearch(""); setSaleOpen(false);
     }, "Sale saved. Receipt opened.");
   }
@@ -245,15 +250,26 @@ function Index() {
     void act(() => recordPayment({ partyType: kind, partyId: party.id!, amount, method }), "Payment recorded.");
   }
 
+  async function openReceipt(s: Sale) {
+    const [design, settings] = await Promise.all([getReceiptDesign(), getSettings()]);
+    const html = renderReceiptHtml(s, design, { shopName: settings.shopName, phone: settings.phone, address: settings.address });
+    const w = window.open("", "_blank", "width=480,height=760");
+    if (!w) { setMsg("Allow pop-ups to print the receipt."); return; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => { w.focus(); w.print(); }, 300);
+  }
+
   return (
-    <div className="min-h-screen bg-[#f5f5f2] text-slate-900">
+    <div className={"app-shell min-h-screen bg-[#f5f5f2] text-slate-900 " + (theme === "dark" ? "dark" : "")} data-app-theme={theme}>
       <aside className="fixed inset-y-0 hidden w-60 flex-col bg-[#202832] text-white lg:flex">
         <div className="p-6"><b className="tracking-widest text-amber-400">AKHTAR AUTOS</b><p className="text-xs text-slate-400">Shop management</p></div>
         <nav className="flex-1 space-y-1 p-3">{tabs.map((t) => <button key={t} onClick={() => setTab(t)} className={"w-full rounded-lg px-4 py-3 text-left capitalize " + (tab === t ? "bg-amber-500 font-bold text-slate-900" : "text-slate-300 hover:bg-white/10")}>{t}</button>)}</nav>
         <p className="p-4 text-xs text-slate-400">Offline database · This device</p>
       </aside>
       <main className="lg:pl-60">
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
+        <header className="app-card sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
           <h1 className="text-xl font-bold capitalize">{tab}</h1>
           <div className="flex gap-2">
             {tab === "sales" && <button className="rounded bg-amber-500 px-3 py-2 font-bold" onClick={() => setSaleOpen(true)}>New sale</button>}
@@ -302,7 +318,7 @@ function Index() {
               <p className="mt-3 text-sm">Total <b>{money(saleTotal)}</b> · Due <b>{money(Math.max(0, saleTotal - toPaisa(salePaid === "" ? (saleTotal / 100).toFixed(2) : salePaid)))}</b></p>
               <div className="mt-3 flex gap-2"><button disabled={busy} className="rounded bg-amber-500 px-4 py-2 font-bold disabled:opacity-40" onClick={saveSale}>Save invoice</button><button className="rounded border px-4 py-2" onClick={() => setSaleOpen(false)}>Cancel</button></div>
             </Panel>}
-            <Panel title="Sales register"><Table heads={["Invoice", "Date", "Customer", "Total", "Paid", "Due", "Actions"]}>{sales.map((s) => <tr key={s.id}><td>{s.invoiceNo}</td><td>{fDate(s.date)}</td><td>{s.customerName}</td><td>{money(s.total)}</td><td>{money(s.paid)}</td><td>{money(s.total - s.paid)}</td><td className="space-x-2"><button className="text-amber-700" onClick={() => printSale(s)}>Print</button><button className="text-slate-600" onClick={() => doSaleReturn(s)}>Return</button></td></tr>)}</Table></Panel>
+            <Panel title="Sales register"><Table heads={["Invoice", "Date", "Customer", "Total", "Paid", "Due", "Actions"]}>{sales.map((s) => <tr key={s.id}><td>{s.invoiceNo}</td><td>{fDate(s.date)}</td><td>{s.customerName}</td><td>{money(s.total)}</td><td>{money(s.paid)}</td><td>{money(s.total - s.paid)}</td><td className="space-x-2"><button className="text-amber-700" onClick={() => void openReceipt(s)}>Print</button><button className="text-slate-600" onClick={() => doSaleReturn(s)}>Return</button></td></tr>)}</Table></Panel>
           </>}
           {tab === "purchases" && <>
             {purOpen && <Panel title="Purchase bill">
@@ -339,6 +355,17 @@ function Index() {
             <Panel title="Payment methods (cash collected)"><div className="flex flex-wrap gap-3 text-sm">{summary?.byMethod && Object.entries(summary.byMethod).map(([m, v]) => <span key={m} className="rounded bg-slate-50 px-3 py-1 capitalize">{m}: {money(v as number)}</span>)}</div></Panel>
           </div>}
           {tab === "settings" && <div className="space-y-5">
+            <Panel title="Application appearance">
+              <p className="mb-3 text-sm text-slate-600">Changes the shop screens only. Receipts stay white with black text.</p>
+              <div className="flex gap-2">
+                {(["light", "dark"] as const).map((t) => (
+                  <button key={t} className={"rounded px-4 py-2 capitalize " + (theme === t ? "bg-amber-500 font-bold text-slate-900" : "border")} onClick={() => { setTheme(t); void saveAppTheme(t); }}>{t}</button>
+                ))}
+              </div>
+            </Panel>
+            <Panel title="Receipt design">
+              <ReceiptStudio onSaved={setMsg} />
+            </Panel>
             <Panel title="Google Drive">
               <p className="mb-3 text-sm text-slate-600">Connect one Google account. Backup is a snapshot in the Akhtar Autos Data folder — not live multi-device sync.</p>
               {!driveConfigured() && <p className="mb-3 rounded bg-amber-50 p-3 text-sm">Google OAuth Client ID is not configured yet. Connection will work after the client ID is set.</p>}
@@ -362,14 +389,7 @@ function Index() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border bg-white p-5"><div className="text-xs uppercase text-slate-500">{label}</div><div className="mt-2 text-2xl font-bold">{value}</div></div>; }
-function Panel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="rounded-xl border bg-white p-5"><h2 className="mb-4 font-bold">{title}</h2>{children}</section>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div className="app-card rounded-xl border bg-white p-5"><div className="text-xs uppercase text-slate-500">{label}</div><div className="mt-2 text-2xl font-bold">{value}</div></div>; }
+function Panel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="app-card rounded-xl border bg-white p-5"><h2 className="mb-4 font-bold">{title}</h2>{children}</section>; }
 function Table({ heads, children }: { heads: string[]; children: React.ReactNode }) { return <div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead><tr className="bg-slate-50 text-xs text-slate-500">{heads.map((h) => <th key={h} className="p-3">{h}</th>)}</tr></thead><tbody className="divide-y">{children}</tbody></table></div>; }
 function PartyRows({ rows, pay }: { rows: Party[]; pay: (p: Party) => void }) { return <div className="divide-y">{rows.map((p) => <div key={p.id} className="flex items-center justify-between py-3"><div><b>{p.name}</b><p className="text-xs text-slate-500">{p.phone || "No phone"}</p></div><button className="text-amber-700" onClick={() => pay(p)}>Record payment</button></div>)}</div>; }
-function printSale(s: Sale) {
-  const w = window.open("", "_blank", "width=420,height=700");
-  if (!w) return;
-  const rows = s.lines.map((l) => "<tr><td>" + l.name + "</td><td>" + l.qty + "</td><td>" + formatPKR(l.price) + "</td><td>" + formatPKR(l.qty * l.price - l.discount) + "</td></tr>").join("");
-  w.document.write("<html><head><title>" + s.invoiceNo + "</title><style>body{font:13px Arial;margin:20px}h2,p{text-align:center}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #ccc;padding:7px;text-align:right}td:first-child,th:first-child{text-align:left}.sum{text-align:right;line-height:2}</style></head><body><h2>AKHTAR AUTOS</h2><p>Sales Receipt</p><p>" + s.invoiceNo + " | " + new Date(s.date).toLocaleString() + "</p><p>Customer: " + s.customerName + "</p><table><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>" + rows + "</table><div class='sum'>Subtotal: " + formatPKR(s.subtotal) + "<br>Discount: " + formatPKR(s.discount) + "<br><b>Total: " + formatPKR(s.total) + "</b><br>Paid: " + formatPKR(s.paid) + "<br>Due: " + formatPKR(s.total - s.paid) + "</div><p>Thank you!</p><script>window.onload=function(){window.print()}<\\/script></body></html>");
-  w.document.close();
-}
