@@ -221,8 +221,17 @@ export function sampleSale(): Sale {
 }
 
 function esc(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "&#39;" })[c] ?? c);
+  return s.replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case "&": return "&" + "amp;";
+      case "<": return "&" + "lt;";
+      case ">": return "&" + "gt;";
+      case '"': return "&" + "quot;";
+      default: return "&" + "#39;";
+    }
+  });
 }
+
 
 const FONT: Record<FontSize, number> = { small: 11, medium: 13, large: 16 };
 const LOGO: Record<FontSize, number> = { small: 48, medium: 76, large: 110 };
@@ -268,7 +277,7 @@ export function renderReceiptHtml(sale: Sale, design: ReceiptDesign, biz: Receip
   };
   const body = d.sections.map((s) => blocks[s]).join("");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(sale.invoiceNo)}</title><style>
-    html,body{background:#fff !important;color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    html{color-scheme:light;}html,body{background:#fff !important;color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{font-family:Arial,Helvetica,sans-serif;font-size:${fs}px;margin:0;padding:12px;}
     .sheet{width:${width};max-width:100%;margin:0 auto;background:#fff;color:#000;text-align:${d.align};}
     table,th,td{color:#000;background:#fff;}
