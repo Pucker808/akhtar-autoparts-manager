@@ -212,3 +212,118 @@
 }
 .receipt-thermal { width: 76mm; font-family: var(--font-mono); font-size: 11px; line-height: 1.35; color: black; background: white; }
 .receipt-a4 { width: 100%; max-width: 190mm; font-size: 12px; color: black; background: white; }
+
+/* ---------- Dark mode overrides for hard-coded utilities in the app shell ----------
+ * index.tsx still uses some fixed Tailwind colors (bg-white, text-slate-*, etc.).
+ * These rules force readable contrast when .dark is on the app shell.
+ */
+.dark.app-shell,
+.app-shell.dark {
+  background-color: var(--color-background) !important;
+  color: var(--color-foreground) !important;
+}
+
+.dark .app-card,
+.app-shell.dark .app-card {
+  background-color: var(--color-card) !important;
+  color: var(--color-card-foreground) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Fixed white panels / headers / mobile nav */
+.dark .bg-white,
+.app-shell.dark .bg-white {
+  background-color: var(--color-card) !important;
+  color: var(--color-card-foreground) !important;
+}
+
+.dark .bg-\[\#f5f5f2\],
+.app-shell.dark .bg-\[\#f5f5f2\] {
+  background-color: var(--color-background) !important;
+}
+
+/* Slate text → readable foreground / muted */
+.dark .text-slate-900,
+.dark .text-slate-800,
+.app-shell.dark .text-slate-900,
+.app-shell.dark .text-slate-800 {
+  color: var(--color-foreground) !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-slate-300,
+.app-shell.dark .text-slate-600,
+.app-shell.dark .text-slate-500,
+.app-shell.dark .text-slate-400,
+.app-shell.dark .text-slate-300 {
+  color: var(--color-muted-foreground) !important;
+}
+
+/* Slate backgrounds → muted / secondary */
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.app-shell.dark .bg-slate-50,
+.app-shell.dark .bg-slate-100 {
+  background-color: var(--color-muted) !important;
+  color: var(--color-muted-foreground) !important;
+}
+
+.dark .bg-slate-800,
+.app-shell.dark .bg-slate-800 {
+  background-color: var(--color-secondary) !important;
+  color: var(--color-secondary-foreground) !important;
+}
+
+/* Amber message / hover chips */
+.dark .bg-amber-100,
+.dark .bg-amber-50,
+.app-shell.dark .bg-amber-100,
+.app-shell.dark .bg-amber-50 {
+  background-color: color-mix(in oklch, var(--color-warning) 25%, transparent) !important;
+  color: var(--color-foreground) !important;
+}
+
+.dark .text-amber-700,
+.dark .text-amber-400,
+.app-shell.dark .text-amber-700,
+.app-shell.dark .text-amber-400 {
+  color: var(--color-primary) !important;
+}
+
+/* Primary action buttons stay high-contrast */
+.dark .bg-amber-500,
+.app-shell.dark .bg-amber-500 {
+  background-color: var(--color-primary) !important;
+  color: var(--color-primary-foreground) !important;
+}
+
+/* Status chips */
+.dark .bg-green-100,
+.app-shell.dark .bg-green-100 {
+  background-color: color-mix(in oklch, var(--color-success) 25%, transparent) !important;
+  color: var(--color-success) !important;
+}
+
+.dark .text-green-800,
+.app-shell.dark .text-green-800 {
+  color: var(--color-success) !important;
+}
+
+.dark .text-red-600,
+.app-shell.dark .text-red-600 {
+  color: var(--color-destructive) !important;
+}
+
+/* Borders on tables / inputs inside cards */
+.dark .border-b,
+.app-shell.dark .border-b {
+  border-color: var(--color-border) !important;
+}
+
+/* Keep sidebar brand chrome intentionally dark in both themes */
+aside.bg-\[\#202832\] {
+  background-color: var(--color-sidebar) !important;
+  color: var(--color-sidebar-foreground) !important;
+}
